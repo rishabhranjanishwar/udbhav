@@ -1,189 +1,442 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Flipbook</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Responsive PDF Flipbook (Turn.js + PDF.js)</title>
 
-  <!-- jQuery + Turn.js -->
+  <!-- jQuery, Turn.js, PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/blasten/turn.js@4/turn.min.js"></script>
-
-  <!-- PDF.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
   <style>
-    body {
-      margin: 0;
-      background: #f4f4f4;
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+    :root{
+      --toolbar-height:48px;
+      --accent:#1e88e5;
+      --glass: rgba(255,255,255,0.85);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg,#eef2f7 0%, #ffffff 100%);
+      color:#222;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      padding:18px;
     }
 
-    h2 {
-      margin: 15px;
+    h1{font-size:20px;margin:6px 0 12px}
+
+    /* Book wrapper */
+    #flipbook-wrapper{
+      width:100%;
+      max-width:1100px;
+      height:75vh;
+      min-height:420px;
+      position:relative;
+      background: #fff;
+      border-radius:12px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.12);
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
 
-    #controls {
-      margin: 10px;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
+    /* the turn.js container */
+    #flipbook{
+      position:relative;
+      will-change:transform;
+      transform-origin:center center;
+      /* width/height will be set from JS after rendering pages */
     }
 
-    #controls button {
-      padding: 8px 14px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      background: #0073e6;
-      color: white;
-      font-size: 14px;
-      transition: 0.3s;
+    /* Each page container */
+    .page{
+      background:#fff;
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
 
-    #controls button:hover {
-      background: #005bb5;
+    .page canvas{
+      width:100%;
+      height:auto;
+      display:block;
     }
 
-    #flipbook-container {
-      width: 100%;
-      max-width: 1000px;
-      height: 80vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      overflow: hidden;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    /* Side arrows (overlaid) */
+    .side-arrow{
+      position:absolute;
+      top:50%;
+      transform:translateY(-50%);
+      width:72px;
+      height:120px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      z-index:40;
+      background: linear-gradient(90deg, rgba(0,0,0,0.08), rgba(0,0,0,0.02));
+      border-radius:8px;
+      user-select:none;
+      transition:all .18s ease;
+      opacity:0.9;
+    }
+    .side-arrow:hover{transform:translateY(-50%) scale(1.03)}
+    .side-arrow.left{left:8px}
+    .side-arrow.right{right:8px}
+    .side-arrow svg{width:34px;height:34px;fill:var(--accent)}
+
+    /* Bottom toolbar */
+    .toolbar{
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:var(--toolbar-height);
+      display:flex;
+      gap:8px;
+      align-items:center;
+      justify-content:center;
+      padding:6px 12px;
+      background: linear-gradient(0deg, rgba(255,255,255,0.9), rgba(255,255,255,0.6));
+      backdrop-filter: blur(6px);
+      z-index:45;
     }
 
-    #flipbook {
-      width: 90%;
-      height: 100%;
+    .toolbar .group{display:flex;gap:8px;align-items:center}
+    .btn{
+      background:var(--accent);
+      color:#fff;border:none;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:600;
+      display:inline-flex;align-items:center;gap:8px;min-width:44px;justify-content:center
     }
+    .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(30,136,229,0.12)}
+    .page-input{width:72px;padding:6px;border-radius:8px;border:1px solid #ddd;text-align:center}
+    .page-info{font-size:13px;color:#555}
 
-    .page {
-      width: 100%;
-      height: 100%;
-      background: white;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    /* Thumbnails strip */
+    #thumb-strip{
+      position:absolute;left:8px;right:8px;bottom:calc(var(--toolbar-height) + 12px);
+      height:72px;display:flex;gap:8px;align-items:center;padding:8px;overflow-x:auto;z-index:44;
+      background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.2));border-radius:8px
     }
+    #thumb-strip .thumb{width:84px;height:64px;flex:0 0 auto;border-radius:6px;overflow:hidden;border:2px solid transparent;cursor:pointer}
+    #thumb-strip .thumb img{width:100%;height:100%;object-fit:cover}
+    #thumb-strip .thumb.active{border-color:var(--accent)}
 
-    canvas {
-      max-width: 100%;
-      max-height: 100%;
+    /* Small helpers */
+    a.download-link{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;background:#eee;color:#333;text-decoration:none}
+
+    /* Responsive tweaks */
+    @media (max-width:720px){
+      .side-arrow{width:56px;height:96px}
+      #flipbook-wrapper{height:72vh}
+      #thumb-strip{height:56px}
     }
   </style>
 </head>
 <body>
 
-  <h2>📖 PDF Flipbook</h2>
+  <h1>Responsive PDF Flipbook — embedded controls</h1>
 
-  <!-- Controls -->
-  <div id="controls">
-    <button onclick="$('#flipbook').turn('previous')">⬅ Prev</button>
-    <button onclick="$('#flipbook').turn('next')">Next ➡</button>
-    <button onclick="zoomIn()">🔍 Zoom In</button>
-    <button onclick="zoomOut()">🔎 Zoom Out</button>
-    <button onclick="goToPage()">📄 Go to Page</button>
-  </div>
+  <div id="flipbook-wrapper">
 
-  <!-- Flipbook Container -->
-  <div id="flipbook-container">
-    <div id="flipbook"></div>
+    <!-- Side arrows -->
+    <div class="side-arrow left" id="arrow-left" title="Previous page">
+      <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+    </div>
+    <div class="side-arrow right" id="arrow-right" title="Next page">
+      <svg viewBox="0 0 24 24"><path d="m8.59 16.59 6-6-6-6L10 4l6 6-6 6z"/></svg>
+    </div>
+
+    <!-- Flipbook element (pages will be appended here) -->
+    <div id="flipbook" aria-label="Flipbook viewer"></div>
+
+    <!-- Thumbnails (click to goto) -->
+    <div id="thumb-strip" aria-hidden="false"></div>
+
+    <!-- Bottom toolbar embedded inside viewer -->
+    <div class="toolbar" role="toolbar">
+      <div class="group">
+        <button class="btn" id="btn-prev" title="Previous (←)">◀</button>
+        <button class="btn" id="btn-next" title="Next (→)">▶</button>
+      </div>
+
+      <div class="group">
+        <input id="page-num" class="page-input" type="number" min="1" value="1">
+        <div class="page-info">/ <span id="page-count">0</span></div>
+        <button class="btn ghost" id="btn-go">Go</button>
+      </div>
+
+      <div class="group">
+        <button class="btn" id="btn-zoom-in" title="Zoom in">＋</button>
+        <button class="btn" id="btn-zoom-out" title="Zoom out">－</button>
+      </div>
+
+      <div class="group">
+        <button class="btn ghost" id="btn-fullscreen" title="Fullscreen">⤢</button>
+        <a id="btn-download" class="download-link" href="#" download title="Download PDF">⤓ PDF</a>
+      </div>
+    </div>
+
   </div>
 
   <script>
-    let scale = 1;
-    let pdfDoc = null;
-    let totalPages = 0;
-    const pdfUrl = "Udbhav Vol 1 Issue 1.pdf";
+  (function(){
+    // --------- CONFIG ---------
+    const pdfUrl = 'Udbhav Vol 1 Issue 1.pdf'; // <-- REPLACE with your PDF filename (must be served alongside index.html)
+    const baseRenderScale = 1.5;  // initial canvas render scale (larger = crisper)
+    const thumbScale = 0.25;      // thumbnail rendering scale
 
-    // Load PDF
-    pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
-      pdfDoc = pdf;
-      totalPages = pdf.numPages;
-      loadPages();
-    });
-
-    // Render all PDF pages into the flipbook
-    function loadPages() {
-      for (let i = 1; i <= totalPages; i++) {
-        let pageDiv = $('<div />').addClass('page').attr('id', 'page-' + i);
-        $("#flipbook").append(pageDiv);
-
-        renderPage(i);
-      }
-
-      initFlipbook();
+    // PDF.js worker
+    if (window['pdfjsLib']) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     }
 
-    // Render a single page into a canvas
-    function renderPage(num) {
-      pdfDoc.getPage(num).then(function(page) {
-        let viewport = page.getViewport({ scale: 1.5 });
-        let canvas = document.createElement("canvas");
-        let context = canvas.getContext("2d");
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+    // DOM refs
+    const $flipbook = $('#flipbook');
+    const $wrapper = $('#flipbook-wrapper');
+    const $thumbStrip = $('#thumb-strip');
+    const $pageNum = $('#page-num');
+    const $pageCount = $('#page-count');
+    const $btnPrev = $('#btn-prev');
+    const $btnNext = $('#btn-next');
+    const $arrowLeft = $('#arrow-left');
+    const $arrowRight = $('#arrow-right');
+    const $btnZoomIn = $('#btn-zoom-in');
+    const $btnZoomOut = $('#btn-zoom-out');
+    const $btnGo = $('#btn-go');
+    const $btnFullscreen = $('#btn-fullscreen');
+    const $btnDownload = $('#btn-download');
 
-        let renderContext = {
-          canvasContext: context,
-          viewport: viewport
-        };
+    let pdfDoc = null;
+    let totalPages = 0;
+    let currentScale = 1; // zoom factor (CSS scale)
 
-        page.render(renderContext).promise.then(function() {
-          document.getElementById("page-" + num).appendChild(canvas);
+    // load PDF
+    pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf){
+      pdfDoc = pdf;
+      totalPages = pdf.numPages;
+      $pageCount.text(totalPages);
+
+      // set download link
+      $btnDownload.attr('href', pdfUrl);
+
+      // render pages sequentially (could be optimized to lazy-load)
+      const renderPromises = [];
+      for (let i=1; i<=totalPages; i++){
+        const pdiv = $('<div/>').addClass('page').attr('id', 'page-'+i);
+        $flipbook.append(pdiv);
+        renderPromises.push(renderPage(i, baseRenderScale));
+      }
+
+      Promise.all(renderPromises).then(() => {
+        // after all pages rendered, set up sizes & init flipbook
+        setupSizesAndInit();
+        buildThumbnails();
+        bindControls();
+      }).catch((err)=>{
+        console.error('Error rendering pages', err);
+      });
+
+    }).catch(function(err){
+      console.error('Error loading PDF:', err);
+      $flipbook.append($('<div>').text('Failed to load PDF. Check console.'));
+    });
+
+    // Render a single page into its container (returns Promise)
+    function renderPage(pageNum, scale=1.5){
+      return pdfDoc.getPage(pageNum).then(function(page){
+        const viewport = page.getViewport({scale});
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.maxWidth = '100%';
+        canvas.style.height = 'auto';
+
+        const renderContext = {canvasContext: ctx, viewport: viewport};
+        return page.render(renderContext).promise.then(function(){
+          document.getElementById('page-'+pageNum).appendChild(canvas);
         });
       });
     }
 
-    // Initialize Flipbook
-    function initFlipbook() {
-      $("#flipbook").turn({
-        autoCenter: true,
-        width: $("#flipbook-container").width(),
-        height: $("#flipbook-container").height(),
-        gradients: true,
-        acceleration: true
+    // Create thumbnail images (from rendered canvases)
+    function buildThumbnails(){
+      $thumbStrip.empty();
+      for (let i=1;i<=totalPages;i++){
+        const sourceCanvas = document.querySelector('#page-'+i+' canvas');
+        if (!sourceCanvas) continue;
+        // create a tiny canvas to draw thumbnail (to reduce memory)
+        const thumbC = document.createElement('canvas');
+        const scale = thumbScale;
+        thumbC.width = Math.max(120, Math.floor(sourceCanvas.width * scale));
+        thumbC.height = Math.max(80, Math.floor(sourceCanvas.height * scale));
+        const tctx = thumbC.getContext('2d');
+        tctx.drawImage(sourceCanvas, 0, 0, thumbC.width, thumbC.height);
+        const dataUrl = thumbC.toDataURL('image/jpeg', 0.7);
+
+        const thumb = $('<div/>').addClass('thumb').attr('data-page', i);
+        const img = $('<img/>').attr('src', dataUrl).attr('alt', 'Page ' + i);
+        thumb.append(img);
+        $thumbStrip.append(thumb);
+      }
+      // bind click
+      $thumbStrip.on('click', '.thumb', function(){
+        const p = parseInt($(this).attr('data-page'));
+        $flipbook.turn('page', p);
       });
     }
 
-    // Zoom In
-    function zoomIn() {
-      scale += 0.1;
-      $('#flipbook').css("transform", "scale(" + scale + ")");
-    }
+    // Calculate sizes and initialize turn.js
+    function setupSizesAndInit(){
+      // compute available size
+      const wrapW = $wrapper.width();
+      const wrapH = $wrapper.height();
 
-    // Zoom Out
-    function zoomOut() {
-      if (scale > 0.5) {
-        scale -= 0.1;
-        $('#flipbook').css("transform", "scale(" + scale + ")");
+      // decide single page size (we want two-page spread)
+      const pageW = Math.max(260, Math.floor(wrapW * 0.46));
+      const pageH = Math.max(340, Math.floor(wrapH * 0.88));
+
+      // set page container sizes
+      $('.page').css({width: pageW + 'px', height: pageH + 'px'});
+
+      // set flipbook total size (2 pages visible side-by-side)
+      const bookW = pageW * 2;
+      const bookH = pageH;
+      $flipbook.css({width: bookW + 'px', height: bookH + 'px'});
+
+      // ensure canvases scale to container
+      $('#flipbook canvas').css({width:'100%',height:'auto',display:'block'});
+
+      // initialize turn.js if not already
+      if ($flipbook.data('turn')){
+        try{ $flipbook.turn('size', bookW, bookH); }catch(e){ console.warn('turn size failed', e); }
+      } else {
+        $flipbook.turn({
+          width: bookW,
+          height: bookH,
+          autoCenter: true,
+          display: 'double',
+          duration: 500,
+          gradients: true,
+          acceleration: true
+        });
+
+        // update page number on turned
+        $flipbook.bind('turned', function(e, page){
+          $pageNum.val(page);
+          highlightThumb(page);
+        });
+
+        // initial highlight
+        highlightThumb(1);
       }
     }
 
-    // Go to Page
-    function goToPage() {
-      let pageNum = prompt("Enter page number:");
-      if (pageNum) {
-        $('#flipbook').turn('page', parseInt(pageNum));
+    // Highlight thumbnail for page (find thumb index)
+    function highlightThumb(page){
+      $thumbStrip.find('.thumb').removeClass('active');
+      const t = $thumbStrip.find('.thumb').filter(function(){ return parseInt($(this).attr('data-page'))===page; }).first();
+      if (t.length) t.addClass('active');
+      // scroll thumbnail into view
+      t[0] && t[0].scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+    }
+
+    // Bind all UI controls
+    function bindControls(){
+      // side arrows
+      $arrowLeft.on('click', ()=> $flipbook.turn('previous'));
+      $arrowRight.on('click', ()=> $flipbook.turn('next'));
+
+      // toolbar prev/next
+      $btnPrev.on('click', ()=> $flipbook.turn('previous'));
+      $btnNext.on('click', ()=> $flipbook.turn('next'));
+
+      // page go
+      $btnGo.on('click', function(){ const p = parseInt($pageNum.val()); if (p>=1 && p<=totalPages) $flipbook.turn('page', p); });
+      $pageNum.on('keypress', function(e){ if (e.key === 'Enter'){ $btnGo.click(); } });
+
+      // zoom
+      $btnZoomIn.on('click', function(){ setZoom(currentScale + 0.12); });
+      $btnZoomOut.on('click', function(){ setZoom(Math.max(0.5, currentScale - 0.12)); });
+
+      // fullscreen
+      $btnFullscreen.on('click', toggleFullScreen);
+
+      // keyboard navigation
+      $(document).on('keydown', function(e){
+        if (e.key === 'ArrowLeft') { $flipbook.turn('previous'); }
+        else if (e.key === 'ArrowRight') { $flipbook.turn('next'); }
+      });
+
+      // basic swipe support
+      let touchStartX = 0;
+      let touchStartY = 0;
+      $wrapper.on('touchstart', function(e){
+        const t = e.originalEvent.touches[0];
+        touchStartX = t.clientX; touchStartY = t.clientY;
+      });
+      $wrapper.on('touchend', function(e){
+        const t = e.originalEvent.changedTouches[0];
+        const dx = t.clientX - touchStartX;
+        const dy = t.clientY - touchStartY;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)){
+          if (dx < 0) $flipbook.turn('next'); else $flipbook.turn('previous');
+        }
+      });
+
+      // mouse wheel to change pages (only when hovered)
+      $wrapper.on('wheel', function(e){
+        // small throttle
+        if (Math.abs(e.originalEvent.deltaY) < 30) return;
+        if (e.originalEvent.deltaY > 0) $flipbook.turn('next'); else $flipbook.turn('previous');
+      });
+
+      // respond to window resize (use turn('size'))
+      $(window).on('resize', function(){
+        // recalc sizes and use turn('size') when available
+        const wrapW = $wrapper.width();
+        const wrapH = $wrapper.height();
+        const pageW = Math.max(260, Math.floor(wrapW * 0.46));
+        const pageH = Math.max(340, Math.floor(wrapH * 0.88));
+        const bookW = pageW * 2;
+        const bookH = pageH;
+
+        $('.page').css({width: pageW + 'px', height: pageH + 'px'});
+        $flipbook.css({width: bookW + 'px', height: bookH + 'px'});
+        try{ $flipbook.turn('size', bookW, bookH); }catch(e){ /* ignore */ }
+      });
+
+      // update page input when user manually turns pages via UI
+      $flipbook.bind('turning', function(e, page, view){ $pageNum.val(page); });
+    }
+
+    // Zoom via CSS transform (quick and smooth)
+    function setZoom(z){
+      currentScale = z;
+      $flipbook.css('transform', 'scale(' + currentScale + ')');
+    }
+
+    // Fullscreen helper
+    function toggleFullScreen(){
+      const el = document.getElementById('flipbook-wrapper');
+      if (!document.fullscreenElement){
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
       }
     }
 
-    // Resize responsiveness
-    $(window).on("resize", function() {
-      $('#flipbook').turn('destroy');
-      initFlipbook();
-    });
+  })();
   </script>
-
 </body>
 </html>
