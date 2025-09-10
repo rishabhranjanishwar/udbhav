@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Flipbook</title>
+
+  <!-- jQuery + Turn.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/blasten/turn.js@4/turn.min.js"></script>
+
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: #f4f4f4;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h2 {
+      margin: 15px;
+    }
+
+    #controls {
+      margin: 10px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    #controls button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #0073e6;
+      color: white;
+      font-size: 14px;
+      transition: 0.3s;
+    }
+
+    #controls button:hover {
+      background: #005bb5;
+    }
+
+    #flipbook-container {
+      width: 100%;
+      max-width: 1000px;
+      height: 80vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    #flipbook {
+      width: 90%;
+      height: 100%;
+    }
+
+    .page {
+      width: 100%;
+      height: 100%;
+      background: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas {
+      max-width: 100%;
+      max-height: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>📖 PDF Flipbook</h2>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button onclick="$('#flipbook').turn('previous')">⬅ Prev</button>
+    <button onclick="$('#flipbook').turn('next')">Next ➡</button>
+    <button onclick="zoomIn()">🔍 Zoom In</button>
+    <button onclick="zoomOut()">🔎 Zoom Out</button>
+    <button onclick="goToPage()">📄 Go to Page</button>
+  </div>
+
+  <!-- Flipbook Container -->
+  <div id="flipbook-container">
+    <div id="flipbook"></div>
+  </div>
+
+  <script>
+    let scale = 1;
+    let pdfDoc = null;
+    let totalPages = 0;
+    const pdfUrl = "Udbhav Vol 1 Issue 1.pdf";
+
+    // Load PDF
+    pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+      pdfDoc = pdf;
+      totalPages = pdf.numPages;
+      loadPages();
+    });
+
+    // Render all PDF pages into the flipbook
+    function loadPages() {
+      for (let i = 1; i <= totalPages; i++) {
+        let pageDiv = $('<div />').addClass('page').attr('id', 'page-' + i);
+        $("#flipbook").append(pageDiv);
+
+        renderPage(i);
+      }
+
+      initFlipbook();
+    }
+
+    // Render a single page into a canvas
+    function renderPage(num) {
+      pdfDoc.getPage(num).then(function(page) {
+        let viewport = page.getViewport({ scale: 1.5 });
+        let canvas = document.createElement("canvas");
+        let context = canvas.getContext("2d");
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        let renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        };
+
+        page.render(renderContext).promise.then(function() {
+          document.getElementById("page-" + num).appendChild(canvas);
+        });
+      });
+    }
+
+    // Initialize Flipbook
+    function initFlipbook() {
+      $("#flipbook").turn({
+        autoCenter: true,
+        width: $("#flipbook-container").width(),
+        height: $("#flipbook-container").height(),
+        gradients: true,
+        acceleration: true
+      });
+    }
+
+    // Zoom In
+    function zoomIn() {
+      scale += 0.1;
+      $('#flipbook').css("transform", "scale(" + scale + ")");
+    }
+
+    // Zoom Out
+    function zoomOut() {
+      if (scale > 0.5) {
+        scale -= 0.1;
+        $('#flipbook').css("transform", "scale(" + scale + ")");
+      }
+    }
+
+    // Go to Page
+    function goToPage() {
+      let pageNum = prompt("Enter page number:");
+      if (pageNum) {
+        $('#flipbook').turn('page', parseInt(pageNum));
+      }
+    }
+
+    // Resize responsiveness
+    $(window).on("resize", function() {
+      $('#flipbook').turn('destroy');
+      initFlipbook();
+    });
+  </script>
+
+</body>
+</html>
