@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Udbhav Vol 1 Issue 1</title>
+    <title>SRM University PDF Flipbook Viewer</title>
     
     <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -41,13 +41,30 @@
             position: relative;
             height: 100vh;
             background: linear-gradient(135deg, #f5f3e7 0%, #e8e5d4 100%);
+            padding: 0;
+        }
+
+        /* Fixed container to exact PDF page dimensions */
+        .flipbook-container {
+            /* Width: exactly 2 PDF pages combined (2 * height / 1.4142) */
+            width: calc(80vh * 2 / 1.4142);
+            /* Height: exactly 1 PDF page height */
+            height: 80vh;
+            max-width: calc(80vh * 2 / 1.4142);
+            max-height: 80vh;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         #flipbook {
             background: #fff;
             border-radius: 8px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
+            /* Fill the container completely */
+            width: 100% !important;
+            height: 100% !important;
         }
 
         .page {
@@ -55,14 +72,40 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            border-right: 1px solid #e8e5d4;
+            border: none;
             position: relative;
+            padding: 0;
+            margin: 0;
+            border-spacing: 0;
+        }
+
+        /* Remove all margins and spacing between pages in spread view */
+        .page:nth-child(even) {
+            margin-left: 0 !important;
+            border-left: none !important;
+        }
+
+        .page:nth-child(odd) {
+            margin-right: 0 !important;
+            border-right: none !important;
+        }
+
+        /* Ensure Turn.js doesn't add any spacing between pages */
+        .turn-page {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
         }
 
         .page canvas {
-            max-width: 100%;
-            max-height: 100%;
+            width: 100%;
+            height: 100%;
             display: block;
+            object-fit: contain;
+            /* Remove any potential spacing around canvas */
+            margin: 0;
+            padding: 0;
+            border: none;
         }
 
         .loading-page {
@@ -360,43 +403,6 @@
             transform: translateY(-1px);
         }
 
-        @media (max-width: 768px) {
-            .controls {
-                bottom: 10px;
-                padding: 0.5rem 1rem;
-                flex-wrap: wrap;
-                max-width: 95vw;
-            }
-
-            .control-group {
-                justify-content: center;
-            }
-
-            .nav-arrow {
-                width: 50px;
-                height: 50px;
-                font-size: 1.2rem;
-            }
-
-            .nav-arrow.prev {
-                left: 10px;
-            }
-
-            .nav-arrow.next {
-                right: 10px;
-            }
-
-            .thumbnail {
-                min-width: 40px;
-                height: 50px;
-            }
-
-            .thumbnails {
-                bottom: 80px;
-                max-width: 95vw;
-            }
-        }
-
         .error-message {
             background: #f8d7da;
             color: #721c24;
@@ -431,7 +437,10 @@
 
         <div class="flipbook-wrapper" id="flipbookWrapper">
             <button class="nav-arrow prev" id="prevArrow">‹</button>
-            <div id="flipbook"></div>
+            <!-- Added fixed A4 ratio container -->
+            <div class="flipbook-container">
+                <div id="flipbook"></div>
+            </div>
             <button class="nav-arrow next" id="nextArrow">›</button>
         </div>
 
@@ -504,7 +513,7 @@
                             throw new Error('PDF not found');
                         }
                     } catch {
-                        this.showError('magazine.pdf not found. Please place your PDF file in the same directory as this HTML file.');
+                        this.showError('Udbhav Issue 1.pdf not found. Please place your PDF file in the same directory as this HTML file.');
                         return;
                     }
                     
@@ -522,14 +531,23 @@
             async initializeFlipbook() {
                 const flipbook = $('#flipbook');
                 
-                const containerWidth = window.innerWidth - 40;
-                const containerHeight = window.innerHeight - 40;
+                const containerElement = $('.flipbook-container');
+                const containerWidth = containerElement.width();
+                const containerHeight = containerElement.height();
                 
+                // For A4 ratio (1:1.4142), container width should be exactly 2 pages wide
                 const isMobile = window.innerWidth <= 768;
-                this.pageWidth = isMobile ? Math.min(containerWidth, 400) : Math.min(containerWidth / 2, 600);
-                this.pageHeight = Math.min(containerHeight, this.pageWidth * 1.4);
                 
-                // Create pages with loading placeholders
+                if (isMobile) {
+                    // Single page takes full container width on mobile
+                    this.pageWidth = containerWidth;
+                    this.pageHeight = containerHeight;
+                } else {
+                    // Each page takes exactly half the container width
+                    this.pageWidth = containerWidth / 2;
+                    this.pageHeight = containerHeight;
+                }
+
                 for (let i = 1; i <= this.totalPages; i++) {
                     const pageDiv = $(`<div class="page" data-page="${i}"></div>`);
                     pageDiv.css({
@@ -548,12 +566,17 @@
                 }
 
                 flipbook.turn({
-                    width: isMobile ? this.pageWidth : this.pageWidth * 2,
-                    height: this.pageHeight,
+                    width: isMobile ? this.pageWidth : containerWidth, // Use full container width for desktop
+                    height: containerHeight, // Use full container height
                     autoCenter: true,
                     acceleration: true,
                     gradients: true,
                     elevation: 50,
+                    margin: 0,
+                    padding: 0,
+                    spacing: 0,
+                    pageSpacing: 0, // Ensure no spacing between pages
+
                     when: {
                         turned: (event, page) => {
                             this.currentPage = page;
@@ -580,10 +603,8 @@
                 this.renderQueue.add(pageNum);
 
                 try {
-                    // Render low resolution first for quick display
                     await this.renderPageAtScale(pageNum, this.lowResScale, true);
                     
-                    // Then render high resolution
                     setTimeout(() => {
                         this.renderPageAtScale(pageNum, this.highResScale, false);
                     }, 100);
@@ -640,7 +661,6 @@
                     }
                 }
                 
-                // Preload in background
                 pagesToPreload.forEach(pageNum => {
                     setTimeout(() => {
                         if (!this.renderQueue.has(pageNum)) {
@@ -661,16 +681,13 @@
             async generateThumbnailsLazy() {
                 const thumbnailStrip = $('#thumbnailStrip');
                 
-                // Generate first few thumbnails immediately
                 for (let i = 1; i <= Math.min(5, this.totalPages); i++) {
                     await this.generateThumbnail(i, thumbnailStrip);
                 }
                 
-                // Generate rest in background
                 setTimeout(async () => {
                     for (let i = 6; i <= this.totalPages; i++) {
                         await this.generateThumbnail(i, thumbnailStrip);
-                        // Small delay to prevent blocking
                         if (i % 5 === 0) {
                             await new Promise(resolve => setTimeout(resolve, 50));
                         }
@@ -723,17 +740,14 @@
                     $('#thumbnails').removeClass('visible');
                 };
                 
-                // Show UI on mouse move or touch
                 $(document).on('mousemove touchstart', showUI);
                 
-                // Keep UI visible when hovering over controls
                 $('#controls, #thumbnails').on('mouseenter', () => {
                     clearTimeout(hideTimeout);
                 }).on('mouseleave', () => {
                     hideTimeout = setTimeout(hideUI, 2000);
                 });
                 
-                // Initial show
                 showUI();
             }
 
@@ -848,14 +862,11 @@
             }
 
             async reRenderVisiblePages() {
-                // Clear cache for current scale
                 const currentPageKey = `${this.currentPage}_${this.highResScale}`;
                 this.renderedPages.delete(currentPageKey);
                 
-                // Re-render current page
                 await this.renderPageProgressive(this.currentPage);
                 
-                // Re-render adjacent visible pages
                 const isMobile = window.innerWidth <= 768;
                 if (!isMobile && this.currentPage < this.totalPages) {
                     const nextPageKey = `${this.currentPage + 1}_${this.highResScale}`;
@@ -872,7 +883,6 @@
                 $('.thumbnail').removeClass('active');
                 $(`.thumbnail[data-page="${this.currentPage}"]`).addClass('active');
                 
-                // Scroll thumbnail into view
                 const activeThumbnail = $(`.thumbnail[data-page="${this.currentPage}"]`)[0];
                 if (activeThumbnail) {
                     activeThumbnail.scrollIntoView({ behavior: 'smooth', inline: 'center' });
@@ -917,19 +927,28 @@
                 if (!this.isInitialized) return;
                 
                 setTimeout(() => {
-                    const containerWidth = window.innerWidth - 40;
-                    const containerHeight = window.innerHeight - 40;
+                    const containerElement = $('.flipbook-container');
+                    const containerWidth = containerElement.width();
+                    const containerHeight = containerElement.height();
                     const isMobile = window.innerWidth <= 768;
-                    const newPageWidth = isMobile ? Math.min(containerWidth, 400) : Math.min(containerWidth / 2, 600);
-                    const newPageHeight = Math.min(containerHeight, newPageWidth * 1.4);
                     
-                    if (Math.abs(newPageWidth - this.pageWidth) > 50) {
+                    let newPageWidth, newPageHeight;
+                    
+                    if (isMobile) {
+                        newPageWidth = containerWidth;
+                        newPageHeight = containerHeight;
+                    } else {
+                        newPageWidth = containerWidth / 2;
+                        newPageHeight = containerHeight;
+                    }
+
+                    if (Math.abs(newPageWidth - this.pageWidth) > 20 || Math.abs(newPageHeight - this.pageHeight) > 20) {
                         this.pageWidth = newPageWidth;
                         this.pageHeight = newPageHeight;
                         
                         $('#flipbook').turn('size', 
-                            isMobile ? this.pageWidth : this.pageWidth * 2, 
-                            this.pageHeight
+                            isMobile ? this.pageWidth : containerWidth, // Use full container width
+                            containerHeight // Use full container height
                         );
                         
                         $('.page').css({
@@ -947,11 +966,11 @@
                 const errorDiv = $(`<div class="error-message">${message}</div>`);
                 $('.viewer-container').prepend(errorDiv);
                 
-                // Create a simple fallback viewer
                 $('#flipbook').html(`
                     <div style="padding: 2rem; text-align: center; color: #6b7a3f;">
                         <h3>PDF Viewer Ready</h3>
-                        <p>Please place your <strong>magazine.pdf</strong> file in the same directory as this HTML file.</p>
+                        <!-- Updated placeholder text to reference the new filename -->
+                        <p>Please place your <strong>Udbhav Issue 1.pdf</strong> file in the same directory as this HTML file.</p>
                         <p>The viewer supports all standard PDF files with interactive page flipping, zoom controls, and thumbnail navigation.</p>
                     </div>
                 `);
